@@ -6,6 +6,9 @@ import Papa from "papaparse";
 
 interface FileUploadProps {
   onDataLoaded: (data: Record<string, string>[], headers: string[], fileName: string) => void;
+  user: { email: string; role: "creator" | "user" } | null;
+  onLoginRequired: () => void;
+  onLogout: () => void;
 }
 
 function useInView(threshold = 0.1) {
@@ -17,9 +20,14 @@ function useInView(threshold = 0.1) {
       ([entry]) => {
         if (entry.isIntersecting) setInView(true);
       },
-      { threshold }
+      { threshold, rootMargin: "0px 0px -50px 0px" }
     );
-    if (ref.current) observer.observe(ref.current);
+    if (ref.current) {
+      observer.observe(ref.current);
+      // Check if already in view on mount
+      const rect = ref.current.getBoundingClientRect();
+      if (rect.top < window.innerHeight) setInView(true);
+    }
     return () => observer.disconnect();
   }, [threshold]);
 
@@ -27,7 +35,25 @@ function useInView(threshold = 0.1) {
 }
 
 function AnimatedSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  const { ref, inView } = useInView();
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const check = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight - 50) {
+        setInView(true);
+      }
+    };
+
+    check();
+    window.addEventListener("scroll", check);
+    return () => window.removeEventListener("scroll", check);
+  }, []);
+
   return (
     <div
       ref={ref}
@@ -35,7 +61,7 @@ function AnimatedSection({ children, className = "", delay = 0 }: { children: Re
       style={{
         opacity: inView ? 1 : 0,
         transform: inView ? "translateY(0px)" : "translateY(40px)",
-        transition: `opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1) ${delay}s, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) ${delay}s`,
+        transition: `opacity 0.7s ease ${delay}s, transform 0.7s ease ${delay}s`,
       }}
     >
       {children}
@@ -43,7 +69,7 @@ function AnimatedSection({ children, className = "", delay = 0 }: { children: Re
   );
 }
 
-export default function FileUpload({ onDataLoaded }: FileUploadProps) {
+export default function FileUpload({ onDataLoaded, user, onLoginRequired, onLogout }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [scrollY, setScrollY] = useState(0);
@@ -180,9 +206,29 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
             <a href="#cara-kerja" className="hover:text-white transition-colors hover:scale-105 inline-block">Cara Kerja</a>
             <a href="#upload" className="hover:text-white transition-colors hover:scale-105 inline-block">Mulai</a>
           </div>
-          <a href="#upload" className="bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold px-5 py-2 rounded-full shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-105">
-            Coba Sekarang
-          </a>
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden md:block">
+                <p className="text-white text-xs font-semibold">{user.email}</p>
+                <p className={`text-xs font-bold ${user.role === "creator" ? "text-violet-400" : "text-cyan-400"}`}>
+                  {user.role === "creator" ? "👑 Creator" : "👤 User"}
+                </p>
+              </div>
+              <button
+                onClick={onLogout}
+                className="bg-white/10 hover:bg-white/20 text-gray-300 text-sm font-semibold px-5 py-2 rounded-full transition-all"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onLoginRequired}
+              className="bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold px-5 py-2 rounded-full shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all hover:scale-105"
+            >
+              Sign Up / Login
+            </button>
+          )}
         </div>
       </nav>
 
@@ -239,13 +285,13 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
             style={{ animation: "fadeSlideUp 0.8s ease 0.7s both" }}
           >
-            <a
-              href="#upload"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-bold px-8 py-4 rounded-2xl text-lg shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-105 transition-all duration-300"
+            <button
+              onClick={() => user ? document.getElementById("fileInput")?.click() : onLoginRequired()}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-bold px-8 py-4 rounded-2xl text-lg shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 hover:scale-105 transition-all"
             >
-              Mulai Analisis Gratis
+              {user ? "Upload Data Sekarang" : "Mulai Analisis Gratis"}
               <TrendingUp className="w-5 h-5" />
-            </a>
+            </button>
             <a
               href="#fitur"
               className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-white font-semibold px-8 py-4 rounded-2xl text-lg hover:bg-white/10 hover:scale-105 transition-all duration-300"
@@ -373,7 +419,13 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              onClick={() => document.getElementById("fileInput")?.click()}
+              onClick={() => {
+              if (!user) {
+                onLoginRequired();
+                return;
+              }
+              document.getElementById("fileInput")?.click();
+            }}
               className={`border-2 border-dashed rounded-3xl p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden ${
                 isDragging
                   ? "border-violet-500 bg-violet-500/10 scale-105"
@@ -383,7 +435,16 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
               {isDragging && (
                 <div className="absolute inset-0 bg-violet-500/5 animate-pulse" />
               )}
-              <input id="fileInput" type="file" accept=".csv" className="hidden" onChange={handleFileInput} />
+              <input
+                id="fileInput"
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(e) => {
+                  if (!user) { onLoginRequired(); return; }
+                  handleFileInput(e);
+                }}
+              />
               <div className="flex flex-col items-center gap-4 relative">
                 <div className={`p-5 rounded-2xl transition-all ${isDragging ? "bg-violet-500/20 scale-110" : "bg-white/10"}`}>
                   <Upload className={`w-10 h-10 transition-colors ${isDragging ? "text-violet-400" : "text-gray-400"}`} />

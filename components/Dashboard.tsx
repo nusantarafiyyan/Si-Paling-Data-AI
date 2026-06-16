@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RefreshCw, FileSpreadsheet, Loader2, TrendingUp, Database, Columns, Hash, Download } from "lucide-react";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
@@ -32,6 +32,9 @@ interface DashboardProps {
   headers: string[];
   fileName: string;
   onReset: () => void;
+  userEmail: string;
+  userRole: "creator" | "user";
+  onLogout: () => void;
 }
 
 function computeStats(data: Record<string, string>[], headers: string[]) {
@@ -76,6 +79,9 @@ export default function Dashboard({
   headers,
   fileName,
   onReset,
+  userEmail,
+  userRole,
+  onLogout,
 }: DashboardProps) {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -140,24 +146,20 @@ export default function Dashboard({
   const exportPDF = async () => {
     try {
       const { default: jsPDF } = await import("jspdf");
-      
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       let yPos = 20;
 
-      // Title
       pdf.setFontSize(20);
       pdf.setTextColor(139, 92, 246);
       pdf.text("Si Paling Data - Laporan Analisis", pageWidth / 2, yPos, { align: "center" });
       yPos += 10;
 
-      // File info
       pdf.setFontSize(10);
       pdf.setTextColor(150, 150, 150);
       pdf.text(`File: ${fileName} | ${data.length} baris · ${headers.length} kolom`, pageWidth / 2, yPos, { align: "center" });
       yPos += 15;
 
-      // Summary
       if (analysis?.summary) {
         pdf.setFontSize(14);
         pdf.setTextColor(0, 0, 0);
@@ -170,7 +172,6 @@ export default function Dashboard({
         yPos += summaryLines.length * 6 + 10;
       }
 
-      // Insights
       if (analysis?.insights?.length) {
         pdf.setFontSize(14);
         pdf.setTextColor(0, 0, 0);
@@ -187,7 +188,6 @@ export default function Dashboard({
         yPos += 6;
       }
 
-      // Recommendations
       if (analysis?.recommendations?.length) {
         if (yPos > 220) { pdf.addPage(); yPos = 20; }
         pdf.setFontSize(14);
@@ -208,7 +208,6 @@ export default function Dashboard({
         });
       }
 
-      // Stats
       if (yPos > 220) { pdf.addPage(); yPos = 20; }
       pdf.setFontSize(14);
       pdf.setTextColor(0, 0, 0);
@@ -221,14 +220,13 @@ export default function Dashboard({
       pdf.text(`Nilai Tertinggi: ${stats.maxVal} (${stats.maxCol})`, 14, yPos); yPos += 6;
       pdf.text(`Rata-rata: ${stats.avg}`, 14, yPos); yPos += 6;
 
-      // Footer
       pdf.setFontSize(8);
       pdf.setTextColor(100, 100, 100);
       pdf.text(`Dibuat oleh Si Paling Data · ${new Date().toLocaleDateString("id-ID")}`, pageWidth / 2, 285, { align: "center" });
 
       pdf.save(`analisis-${fileName.replace(".csv", "")}.pdf`);
-    } catch (error) {
-      console.error("Gagal export PDF:", error);
+    } catch (err) {
+      console.error("Gagal export PDF:", err);
       alert("Gagal mengexport PDF. Silakan coba lagi.");
     }
   };
@@ -238,21 +236,34 @@ export default function Dashboard({
       <div id="dashboard-content" className="max-w-7xl mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">
               AI Data Analytics Dashboard
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <FileSpreadsheet className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-400 text-sm">{fileName}</span>
+              <span className="text-gray-400 text-sm truncate max-w-xs">{fileName}</span>
               <span className="text-gray-600">•</span>
               <span className="text-gray-400 text-sm">
                 {data.length} baris · {headers.length} kolom
               </span>
             </div>
           </div>
+
+          {/* Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* User Info */}
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+              <div>
+                <p className="text-white text-xs font-semibold">{userEmail}</p>
+                <p className={`text-xs font-bold ${userRole === "creator" ? "text-violet-400" : "text-cyan-400"}`}>
+                  {userRole === "creator" ? "👑 Creator" : "👤 User"}
+                </p>
+              </div>
+            </div>
+
+            {/* Export PDF - hanya muncul setelah analisis */}
             {analysis && (
               <button
                 onClick={exportPDF}
@@ -262,12 +273,22 @@ export default function Dashboard({
                 Export PDF
               </button>
             )}
+
+            {/* Ganti File */}
             <button
               onClick={onReset}
               className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-4 py-2 text-sm transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               Ganti File
+            </button>
+
+            {/* Logout */}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl px-4 py-2 text-sm transition-colors"
+            >
+              Logout
             </button>
           </div>
         </div>
