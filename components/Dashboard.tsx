@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, FileSpreadsheet, Loader2, TrendingUp, Database, Columns, Hash } from "lucide-react";
+import { RefreshCw, FileSpreadsheet, Loader2, TrendingUp, Database, Columns, Hash, Download } from "lucide-react";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
 import ChatPanel from "./ChatPanel";
@@ -137,9 +137,105 @@ export default function Dashboard({
     }
   };
 
+  const exportPDF = async () => {
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let yPos = 20;
+
+      // Title
+      pdf.setFontSize(20);
+      pdf.setTextColor(139, 92, 246);
+      pdf.text("Si Paling Data - Laporan Analisis", pageWidth / 2, yPos, { align: "center" });
+      yPos += 10;
+
+      // File info
+      pdf.setFontSize(10);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text(`File: ${fileName} | ${data.length} baris · ${headers.length} kolom`, pageWidth / 2, yPos, { align: "center" });
+      yPos += 15;
+
+      // Summary
+      if (analysis?.summary) {
+        pdf.setFontSize(14);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("Ringkasan Eksekutif", 14, yPos);
+        yPos += 8;
+        pdf.setFontSize(10);
+        pdf.setTextColor(80, 80, 80);
+        const summaryLines = pdf.splitTextToSize(analysis.summary, pageWidth - 28);
+        pdf.text(summaryLines, 14, yPos);
+        yPos += summaryLines.length * 6 + 10;
+      }
+
+      // Insights
+      if (analysis?.insights?.length) {
+        pdf.setFontSize(14);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("Key Insights", 14, yPos);
+        yPos += 8;
+        analysis.insights.forEach((insight, i) => {
+          if (yPos + 20 > 270) { pdf.addPage(); yPos = 20; }
+          pdf.setFontSize(10);
+          pdf.setTextColor(80, 80, 80);
+          const lines = pdf.splitTextToSize(`${i + 1}. ${insight}`, pageWidth - 28);
+          pdf.text(lines, 14, yPos);
+          yPos += lines.length * 6 + 4;
+        });
+        yPos += 6;
+      }
+
+      // Recommendations
+      if (analysis?.recommendations?.length) {
+        if (yPos > 220) { pdf.addPage(); yPos = 20; }
+        pdf.setFontSize(14);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text("Rekomendasi Strategis", 14, yPos);
+        yPos += 8;
+        analysis.recommendations.forEach((rec, i) => {
+          if (yPos + 20 > 270) { pdf.addPage(); yPos = 20; }
+          pdf.setFontSize(11);
+          pdf.setTextColor(139, 92, 246);
+          pdf.text(`${i + 1}. ${rec.title} [${rec.priority}]`, 14, yPos);
+          yPos += 6;
+          pdf.setFontSize(10);
+          pdf.setTextColor(80, 80, 80);
+          const lines = pdf.splitTextToSize(rec.description, pageWidth - 28);
+          pdf.text(lines, 14, yPos);
+          yPos += lines.length * 6 + 6;
+        });
+      }
+
+      // Stats
+      if (yPos > 220) { pdf.addPage(); yPos = 20; }
+      pdf.setFontSize(14);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text("Statistik Data", 14, yPos);
+      yPos += 8;
+      pdf.setFontSize(10);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text(`Total Baris: ${stats.totalRows}`, 14, yPos); yPos += 6;
+      pdf.text(`Total Kolom: ${stats.totalCols}`, 14, yPos); yPos += 6;
+      pdf.text(`Nilai Tertinggi: ${stats.maxVal} (${stats.maxCol})`, 14, yPos); yPos += 6;
+      pdf.text(`Rata-rata: ${stats.avg}`, 14, yPos); yPos += 6;
+
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Dibuat oleh Si Paling Data · ${new Date().toLocaleDateString("id-ID")}`, pageWidth / 2, 285, { align: "center" });
+
+      pdf.save(`analisis-${fileName.replace(".csv", "")}.pdf`);
+    } catch (error) {
+      console.error("Gagal export PDF:", error);
+      alert("Gagal mengexport PDF. Silakan coba lagi.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div id="dashboard-content" className="max-w-7xl mx-auto space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -156,13 +252,24 @@ export default function Dashboard({
               </span>
             </div>
           </div>
-          <button
-            onClick={onReset}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-4 py-2 text-sm transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Ganti File
-          </button>
+          <div className="flex items-center gap-2">
+            {analysis && (
+              <button
+                onClick={exportPDF}
+                className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:opacity-90 text-white rounded-xl px-4 py-2 text-sm transition-all"
+              >
+                <Download className="w-4 h-4" />
+                Export PDF
+              </button>
+            )}
+            <button
+              onClick={onReset}
+              className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-4 py-2 text-sm transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Ganti File
+            </button>
+          </div>
         </div>
 
         {/* Summary Stats Cards */}
